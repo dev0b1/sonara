@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+__pycache__/
+*.spec
+*.pyc
+*.pyo
+.sonara_license.json
+python/admin_keys.json
+*.egg-info/
+.env
+.vite/
+.DS_Store
+Thumbs.db
