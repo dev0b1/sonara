@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sonara Web</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar glass">
+        <div>
+          <h1>Sonara Web</h1>
+          <p>Speech-to-text in your browser</p>
+        </div>
+        <button id="upgradeBtn" class="btn primary">Upgrade</button>
+      </header>
+
+      <main class="grid">
+        <section class="card glass">
+          <h2>Audio Upload</h2>
+          <p class="muted">Upload audio here, then click Transcribe.</p>
+          <div class="row">
+            <input id="audioFile" type="file" accept="audio/*" />
+            <button id="transcribeBtn" class="btn primary">Transcribe (Microphone)</button>
+          </div>
+          <p class="muted small">
+            Note: browsers can’t transcribe uploaded audio files directly. The web Transcribe button uses your microphone.
+            For offline uploaded-audio transcription, use Sonara Desktop.
+          </p>
+          <div id="fileInfo" class="muted small"></div>
+        </section>
+
+        <section class="card glass full">
+          <div class="row spread">
+            <h2>Transcript</h2>
+            <div class="row">
+              <button id="clearBtn" class="btn">Clear</button>
+              <button id="exportBtn" class="btn primary">Export .txt</button>
+            </div>
+          </div>
+          <textarea id="transcript" placeholder="Transcript appears here..."></textarea>
+        </section>
+      </main>
+    </div>
+
+    <div id="pricingModal" class="modal hidden">
+      <div class="modal-card glass">
+        <h3>Upgrade Sonara</h3>
+        <p id="pricingReason" class="muted">Choose a plan. Whop checkout gives you the access key.</p>
+        <div class="plans">
+          <button id="lifetimeBtn" class="plan">
+            <strong>Lifetime Pro</strong>
+            <span id="lifetimePriceLabel">$12 one-time</span>
+          </button>
+        </div>
+        <label for="accessKey">Have a personal unique key? (Keys are unshareable)</label>
+        <div class="row">
+          <input id="accessKey" placeholder="SONARA-XXXX-..." />
+          <button id="saveKeyBtn" class="btn primary">Save Key</button>
+        </div>
+        <div id="keyStatus" class="small muted"></div>
+        <button id="closeModalBtn" class="btn">Cancel</button>
+      </div>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

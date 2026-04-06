@@ -13,10 +13,12 @@ import {
   Box,
   Spinner,
 } from '@chakra-ui/react'
+import { parseInvokeJson } from '../utils/invokeJson'
 
 export default function AdminModal({ open, onClose }) {
   const [keys, setKeys] = useState([])
   const [loading, setLoading] = useState(false)
+  const [resetting, setResetting] = useState(false)
 
   useEffect(() => {
     if (open) fetchKeys()
@@ -30,7 +32,7 @@ export default function AdminModal({ open, onClose }) {
       )
       if (!core) throw new Error('Tauri invoke not available')
       const out = await core.invoke('get_admin_keys')
-      const parsed = JSON.parse(out)
+      const parsed = parseInvokeJson(out) || {}
       setKeys(parsed.keys || [])
     } catch (e) {
       console.error(e)
@@ -57,7 +59,7 @@ export default function AdminModal({ open, onClose }) {
       const core = await import('@tauri-apps/api/core').catch(() => null)
       if (!core) throw new Error('Tauri invoke not available')
       const out = await core.invoke('issue_admin_key', { key: k, issued_to: buyer })
-      const parsed = JSON.parse(out)
+      const parsed = parseInvokeJson(out) || {}
       if (parsed.ok) {
         window.alert('Issued')
         fetchKeys()
@@ -69,15 +71,46 @@ export default function AdminModal({ open, onClose }) {
     }
   }
 
+  async function resetLicense() {
+    const ok = window.confirm(
+      'Reset local license state on this machine?\n\nThis is for testing the free → upgrade flow. It will remove the local license file and you will appear as FREE until you activate again.'
+    )
+    if (!ok) return
+    setResetting(true)
+    try {
+      const core = await import('@tauri-apps/api/core').catch(() => null)
+      if (!core) throw new Error('Tauri invoke not available')
+      const out = await core.invoke('reset_license_for_testing')
+      const parsed = parseInvokeJson(out) || {}
+      if (parsed.ok) {
+        window.alert('License reset. You are now FREE (until you activate again).')
+      } else {
+        window.alert('Reset failed.')
+      }
+    } catch (e) {
+      window.alert('Error: ' + e.toString())
+    } finally {
+      setResetting(false)
+    }
+  }
+
   return (
     <Modal isOpen={open} onClose={onClose} size="3xl" isCentered>
       <ModalOverlay />
       <ModalContent>
         <ModalHeader>Admin - Activation Keys</ModalHeader>
         <ModalBody>
-          <Button onClick={fetchKeys} mb={3}>
-            Refresh
-          </Button>
+          <HStack mb={3} spacing={3} justify="space-between" flexWrap="wrap">
+            <Button onClick={fetchKeys}>Refresh</Button>
+            <Button
+              variant="outline"
+              colorScheme="red"
+              onClick={resetLicense}
+              isLoading={resetting}
+            >
+              Reset license (testing)
+            </Button>
+          </HStack>
           <VStack align="stretch" spacing={2} maxH="380px" overflowY="auto">
             {loading && (
               <HStack py={4} justify="center">

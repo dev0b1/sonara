@@ -6,7 +6,7 @@ import argparse
 from faster_whisper import WhisperModel
 import soundfile as sf
 
-from python.stt_engine import group_segments_by_5min, format_timestamp
+from stt_engine import group_segments_by_5min, format_timestamp
 
 
 def main():

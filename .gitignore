@@ -10,5 +10,21 @@ python/admin_keys.json
 *.egg-info/
 .env
 .vite/
+.tauri/
+.cargo/
+.rustc_info.json
+.cargo-lock
+.fingerprint/
+.python-version
+.venv/
+.venv*/
+.mypy_cache/
+.pytest_cache/
+
+# Tauri / Rust build outputs
+src-tauri/target/
+
+# Tauri generated schemas during build/dev
+src-tauri/gen/
 .DS_Store
 Thumbs.db

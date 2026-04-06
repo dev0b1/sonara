@@ -1,22 +1,41 @@
 import json
 import os
 import hashlib
-from datetime import datetime
+from datetime import datetime, date
 
 LICENSE_FILE = os.path.join(os.path.expanduser("~"), ".sonara_license.json")
 ADMIN_KEYS_FILE = os.path.join(os.path.dirname(__file__), "admin_keys.json")
 
-FREE_LIMIT_SECONDS = 600  # 10 minutes
+FREE_LIMIT_SECONDS = 1200  # 20 minutes per day
+PRO_UPLOAD_LIMIT_SECONDS = 30 * 3600  # 30 hours per file (Pro)
 
 
 def _load():
     if os.path.exists(LICENSE_FILE):
         try:
             with open(LICENSE_FILE, "r") as f:
-                return json.load(f)
+                data = json.load(f)
+                # Daily reset for free tier usage
+                today = date.today().isoformat()
+                last = data.get("usage_date")
+                if last != today:
+                    data["usage_date"] = today
+                    data["used_seconds"] = 0
+                    try:
+                        _save(data)
+                    except Exception:
+                        pass
+                return data
         except Exception:
             pass
-    return {"tier": "free", "used_seconds": 0, "license_key": None, "activated_at": None, "export_unlocked": False}
+    return {
+        "tier": "free",
+        "used_seconds": 0,
+        "usage_date": date.today().isoformat(),
+        "license_key": None,
+        "activated_at": None,
+        "export_unlocked": False,
+    }
 
 
 def _save(data):
@@ -51,13 +70,25 @@ def add_used_seconds(seconds):
     _save(data)
 
 
-def activate_license(key: str):
+def get_pro_upload_limit_seconds():
+    return PRO_UPLOAD_LIMIT_SECONDS
+
+
+def activate_license(key: str) -> dict:
     """
-    Activate license.
+    Activate license. Returns {"ok": bool, "message": str}.
     Priority order:
       1. If key matches an unused admin key in `admin_keys.json`, mark it used and activate.
-      2. If key matches the built-in hashed master key, activate.
+      2. MASTER_LICENSE_KEY env (exact match).
+      3. Keys containing EXPORT (export unlock).
+      4. Built-in hashed lifetime key (with or without SONARA- prefix).
     """
+
+    def _ok(msg: str) -> dict:
+        return {"ok": True, "message": msg}
+
+    def _fail(msg: str) -> dict:
+        return {"ok": False, "message": msg}
 
     def _load_admin_keys():
         if not os.path.exists(ADMIN_KEYS_FILE):
@@ -97,47 +128,69 @@ def activate_license(key: str):
                 return True
         return None
 
-    admin_result = _use_admin_key(key)
+    raw = (key or "").strip()
+    if not raw:
+        return _fail("Enter your license key.")
+
+    admin_result = _use_admin_key(raw)
     if admin_result is True:
         data = _load()
         data["tier"] = "pro"
-        data["license_key"] = key.strip()
+        data["license_key"] = raw
         data["activated_at"] = datetime.now().isoformat()
         _save(data)
-        return True
+        return _ok("Lifetime Pro activated.")
+
     if admin_result is False:
-        return False
+        # Same key re-entered after a successful activation (common in Support / reinstall edge cases).
+        data = _load()
+        if (
+            (data.get("license_key") or "").strip().upper() == raw.strip().upper()
+            and data.get("tier") == "pro"
+        ):
+            return _ok("Lifetime Pro is already active on this device.")
+        return _fail(
+            "This license key was already redeemed. Each purchase key works once. "
+            "Use the key from your latest Whop receipt, or contact support for a replacement."
+        )
 
     # Fallback: single master hash-based key
-    # Check for a configured master license key (exact match)
     MASTER = os.environ.get("MASTER_LICENSE_KEY")
-    if MASTER and key.strip() == MASTER:
+    if MASTER and raw == MASTER:
         data = _load()
         data["tier"] = "pro"
-        data["license_key"] = key.strip()
+        data["license_key"] = raw
         data["activated_at"] = datetime.now().isoformat()
         _save(data)
-        return True
+        return _ok("Lifetime Pro activated.")
 
     # Detect export unlock keys (convention: contain 'EXPORT')
-    if "EXPORT" in key.strip().upper():
+    if "EXPORT" in raw.upper():
         data = _load()
         data["export_unlocked"] = True
-        data["license_key"] = key.strip()
+        data["license_key"] = raw
         data["activated_at"] = datetime.now().isoformat()
         _save(data)
-        return True
+        return _ok("Extended export options saved.")
 
     SECRET = "SONARA2024LIFETIME"
     valid_hash = hashlib.sha256(f"SONARA-PRO-{SECRET}".encode()).hexdigest()[:16].upper()
-    if key.strip().upper() == valid_hash:
+    upper = raw.upper()
+    body = upper[7:] if upper.startswith("SONARA-") else upper
+    if body == valid_hash or upper == valid_hash:
         data = _load()
         data["tier"] = "pro"
-        data["license_key"] = key.strip()
+        data["license_key"] = raw
         data["activated_at"] = datetime.now().isoformat()
         _save(data)
-        return True
-    return False
+        return _ok("Lifetime Pro activated.")
+
+    return _fail(
+        "That key is not recognized. Only keys issued for your purchase will work — paste the exact key from your "
+        "Whop receipt or email (no spaces). Keys you invent or copy from elsewhere cannot activate. "
+        "If you build from source, add buyer keys to python/admin_keys.json and bundle them in the app. "
+        "Contact support with your order ID if you never received a key."
+    )
 
 
 def get_admin_keys():

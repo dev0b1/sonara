@@ -8,7 +8,6 @@ import {
   ModalFooter,
   Button,
   Text,
-  SimpleGrid,
   Box,
   Heading,
   List,
@@ -19,33 +18,54 @@ import {
   AlertIcon,
   Divider,
 } from '@chakra-ui/react'
+import { parseInvokeJson } from '../utils/invokeJson'
 
-const MONTHLY_PRICE = 29
-const LIFETIME_PRICE = 49
+function isTauriRuntime() {
+  try {
+    return Boolean(window.__TAURI_INTERNALS__ || window.__TAURI__)
+  } catch {
+    return false
+  }
+}
+
+async function openExternalUrl(url) {
+  if (!isTauriRuntime()) {
+    window.open(url, '_blank', 'noopener,noreferrer')
+    return
+  }
+  // Tauri v2: use plugin-opener if available; otherwise fallback to window.open
+  const opener = await import('@tauri-apps/plugin-opener').catch(() => null)
+  if (opener?.openUrl) {
+    await opener.openUrl(url)
+    return
+  }
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
 
 export default function PricingModal({
   open: isOpen,
   onClose,
-  showLifetime = false,
+  mode = 'lifetime',
+  reason = '',
+  lifetimePrice = 12,
+  proUploadHours = 30,
+  lifetimeUrl,
   onActivated,
+  /** When true, hide checkout / upgrade CTAs (Lifetime Pro already active). */
+  isProUser = false,
 }) {
   const [key, setKey] = useState('')
   const [status, setStatus] = useState(null)
 
-  const buyMonthly = () => {
-    const url =
-      import.meta.env.VITE_WHOP_MONTHLY_URL ||
-      import.meta.env.VITE_WHOP_CHECKOUT_URL ||
-      'https://whop.com/checkout/plan_I8OcMm1yrwYwG'
-    window.open(url, '_blank')
-  }
-
   const buyLifetime = () => {
     const url =
+      lifetimeUrl ||
       import.meta.env.VITE_WHOP_LIFETIME_URL ||
       import.meta.env.VITE_WHOP_CHECKOUT_URL ||
       'https://whop.com/checkout/plan_DFiMSfhJDR3NR'
-    window.open(url, '_blank')
+    openExternalUrl(url).catch(() => {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    })
   }
 
   const activate = async () => {
@@ -59,15 +79,31 @@ export default function PricingModal({
           msg: 'Activation only works in the Sonara desktop app.',
         })
       const out = await core.invoke('activate_license', { key })
-      const parsed = JSON.parse(out)
+      const parsed = parseInvokeJson(out)
+      if (!parsed) {
+        return setStatus({ ok: false, msg: 'Empty response from activation. Try again.' })
+      }
       if (parsed.ok) {
-        setStatus({ ok: true, msg: 'Activated. You can close this window.' })
+        setStatus({
+          ok: true,
+          msg: parsed.message || 'Activated. You can close this window.',
+        })
         onActivated?.()
       } else {
-        setStatus({ ok: false, msg: 'Activation failed' })
+        setStatus({
+          ok: false,
+          msg: parsed.message || 'Activation failed.',
+        })
       }
     } catch (e) {
-      setStatus({ ok: false, msg: e.toString() })
+      const hint =
+        e?.message?.includes('JSON') || e?.name === 'SyntaxError'
+          ? ' If this persists, reinstall the app so python/admin_keys.json is bundled next to bridge.py.'
+          : ''
+      setStatus({
+        ok: false,
+        msg: (e?.message || e?.toString?.() || 'Activation failed.') + hint,
+      })
     }
   }
 
@@ -75,60 +111,46 @@ export default function PricingModal({
     <Modal isOpen={isOpen} onClose={onClose} size="4xl" isCentered>
       <ModalOverlay />
       <ModalContent>
-        <ModalHeader>Upgrade Sonara</ModalHeader>
+        <ModalHeader>{isProUser ? 'Sonara' : 'Upgrade Sonara'}</ModalHeader>
         <ModalBody>
-          <Text mb={5} color="gray.500">
-            Monthly plan is always available. Lifetime appears only when you export
-            transcripts longer than 3 hours.
-          </Text>
+          {isProUser ? (
+            <Text mb={4} color="gray.500">
+              You’re on <b>Lifetime Pro</b>. Export and long uploads are included — no extra purchase needed.
+            </Text>
+          ) : (
+            <Text mb={5} color="gray.500">
+              {reason ||
+                'Lifetime Pro is a one-time purchase. After checkout you’ll receive a personal unique key.'}
+            </Text>
+          )}
 
-          <SimpleGrid columns={{ base: 1, md: showLifetime ? 2 : 1 }} spacing={4}>
+          {!isProUser && (
             <Box borderWidth="1px" borderRadius="lg" p={4}>
               <Heading size="sm" mb={2}>
-                Monthly
+                Lifetime Pro
               </Heading>
               <Text fontSize="3xl" fontWeight="bold" mb={3}>
-                ${MONTHLY_PRICE}
+                ${lifetimePrice}
                 <Text as="span" fontSize="md" color="gray.500" ml={1}>
-                  /mo
+                  once
                 </Text>
               </Text>
               <List spacing={1} mb={4} color="gray.500">
-                <ListItem>Unlimited transcription</ListItem>
+                <ListItem>Up to {proUploadHours} hours per file</ListItem>
                 <ListItem>5-minute timestamp blocks</ListItem>
                 <ListItem>Export to .txt</ListItem>
+                <ListItem>Personal unique key (unshareable)</ListItem>
               </List>
-              <Button colorScheme="blue" w="full" onClick={buyMonthly}>
-                Subscribe - ${MONTHLY_PRICE}/month
+              <Button colorScheme="teal" w="full" onClick={buyLifetime}>
+                Get Lifetime Pro - ${lifetimePrice}
               </Button>
             </Box>
+          )}
 
-            {showLifetime && (
-              <Box borderWidth="1px" borderRadius="lg" p={4}>
-                <Heading size="sm" mb={2}>
-                  Lifetime
-                </Heading>
-                <Text fontSize="3xl" fontWeight="bold" mb={3}>
-                  ${LIFETIME_PRICE}
-                  <Text as="span" fontSize="md" color="gray.500" ml={1}>
-                    once
-                  </Text>
-                </Text>
-                <List spacing={1} mb={4} color="gray.500">
-                  <ListItem>One-time payment</ListItem>
-                  <ListItem>Best for very long archives (3h+)</ListItem>
-                  <ListItem>Same Pro features as monthly</ListItem>
-                </List>
-                <Button colorScheme="teal" w="full" onClick={buyLifetime}>
-                  Get lifetime - ${LIFETIME_PRICE}
-                </Button>
-              </Box>
-            )}
-          </SimpleGrid>
-
-          <Divider my={5} />
+          {!isProUser && <Divider my={5} />}
           <Text fontSize="sm" color="gray.500" mb={2}>
-            Have a license key?
+            Have a personal unique license key? Paste the exact key from your Whop email — keys are unshareable and must
+            match what we issued for your purchase.
           </Text>
           <HStack>
             <Input
@@ -146,8 +168,8 @@ export default function PricingModal({
           )}
         </ModalBody>
         <ModalFooter>
-          <Button variant="ghost" onClick={onClose}>
-            Close
+          <Button variant="outline" onClick={onClose}>
+            Cancel
           </Button>
         </ModalFooter>
       </ModalContent>
